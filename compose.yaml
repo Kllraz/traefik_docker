@@ -1,0 +1,66 @@
+services:
+  traefik:
+    build: .
+    container_name: traefik
+    restart: always
+    
+    security_opt:
+      - no-new-privileges=true
+    cap_drop:
+      - ALL
+
+    ports:
+      - 80:80
+      - 443:443
+
+    volumes:
+      - type: bind
+        source: ./traefik.yml
+        target: /traefik.yml
+        read_only: true
+      - letsencrypt:/letsencrypt
+
+    networks:
+      - proxy
+      - docker_daemon
+
+    depends_on:
+      docker_daemon:
+        condition: service_healthy
+
+  
+  docker_daemon:
+    image: haproxy:2.8-alpine
+    container_name: docker_daemon
+    restart: always
+    user: haproxy:998
+
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - type: bind
+        source: ./haproxy.cfg
+        target: /usr/local/etc/haproxy/haproxy.cfg
+        read_only: true
+    
+    networks:
+      - docker_daemon
+
+    healthcheck:
+      test: wget --spider --tries=1 --no-verbose http://localhost:2375/_ping || exit 1
+      start_period: 5s
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  letsencrypt:
+
+networks:
+  docker_daemon:
+  proxy:
+    external: true
